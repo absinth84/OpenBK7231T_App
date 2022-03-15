@@ -5,6 +5,7 @@
 #include "new_pins.h"
 #include "httpserver/new_http.h"
 #include "logging/logging.h"
+#include "new_cmd.h"
 
 
 //According to your need to modify the constants.
@@ -135,13 +136,13 @@ int TC74_readTemp_method2(int dev_adr)
 	//i2c1_init();
 	i2c_hdl = ddev_open("i2c1", &status, oflag);
     if(DD_HANDLE_UNVALID == i2c_hdl){
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,"TC74_readTemp_method2 ddev_open failed, status %i!\n",status);
+		addLogAdv(LOG_INFO, LOG_FEATURE_I2C,"TC74_readTemp_method2 ddev_open failed, status %i!\n",status);
 		return -1;
 	}
 
     i2c_operater.salve_id = dev_adr;
 
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,"TC74_readTemp_method2 ddev_open OK!\n");
+		addLogAdv(LOG_INFO, LOG_FEATURE_I2C,"TC74_readTemp_method2 ddev_open OK!\n");
 
 
 	camera_intf_sccb_write(0,0x00);
@@ -166,11 +167,11 @@ int TC74_readTemp_method2(int dev_adr)
 //	//i2c1_init();
 //	i2c_hdl = ddev_open("i2c1", &status, oflag);
 //    if(DD_HANDLE_UNVALID == i2c_hdl){
-//		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,"TC74_readTemp_method2 ddev_open failed, status %i!\n",status);
+//		addLogAdv(LOG_INFO, LOG_FEATURE_I2C,"TC74_readTemp_method2 ddev_open failed, status %i!\n",status);
 //		return -1;
 //	}
 //
-//		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,"TC74_readTemp_method2 ddev_open OK!\n");
+//		addLogAdv(LOG_INFO, LOG_FEATURE_I2C,"TC74_readTemp_method2 ddev_open OK!\n");
 //
 //	//I2C1_start();
 //	//i2c1_open(0);
@@ -384,13 +385,13 @@ static void I2CWRNBYTE_CODEC(unsigned char reg, unsigned char val)
 void run_i2c_test()
 {
 	int res;
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,"Will do I2C attemt %i!\n",attempt);
+		addLogAdv(LOG_INFO, LOG_FEATURE_I2C,"Will do I2C attemt %i!\n",attempt);
 		attempt++;
 		// TC74A2
 		res = TC74_readTemp_method2(0x4A);
-		addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,"Temp result is %i!\n",res);
+		addLogAdv(LOG_INFO, LOG_FEATURE_I2C,"Temp result is %i!\n",res);
 		//res = TC74_readTemp_method3(0x4A);
-		//addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,"Temp result is %i!\n",res);
+		//addLogAdv(LOG_INFO, LOG_FEATURE_I2C,"Temp result is %i!\n",res);
 }
 void my_i2c_test(void *p)
 {
@@ -418,7 +419,7 @@ void start_i2c_test()
 
     if(err != kNoErr)
     {
-       ADDLOG_ERROR(LOG_FEATURE_HTTP, "create \"TCP_server\" thread failed!\r\n");
+       ADDLOG_ERROR(LOG_FEATURE_I2C, "create \"I2C\" thread failed!\r\n");
     }
     rtos_start_timer(&g_i2c_test);
 }
@@ -1050,11 +1051,24 @@ bool CHANNEL_Check(int ch) {
 }
 
 
-int CHANNEL_GetRoleForChannel(int ch){
+int CHANNEL_GetRoleForOutputChannel(int ch){
 	int i;
 	for (i = 0; i < 32; i++){
 		if (g_pins.channels[i] == ch){
-			return g_pins.roles[i];
+			switch(g_pins.roles[i]){
+				case IOR_Relay:
+				case IOR_Relay_n:
+				case IOR_LED:
+				case IOR_LED_n:
+				case IOR_PWM:
+					return g_pins.roles[i];
+					break;
+				case IOR_Button:
+				case IOR_Button_n:
+				case IOR_LED_WIFI:
+				case IOR_LED_WIFI_n:
+					break;
+			}
 		}
 	}
 	return IOR_None;
@@ -1195,6 +1209,37 @@ void PIN_ticks(void *param)
 	}
 }
 
+static int showgpi(const void *context, const char *cmd, const char *args){
+	int i;
+	unsigned int value = 0;
+
+	for (i = 0; i < 32; i++) {
+		int val = 0;
+#ifdef WINDOWS		
+#elif PLATFORM_XR809
+		int xr_port; // eg GPIO_PORT_A
+		int xr_pin; // eg. GPIO_PIN_20
+		PIN_XR809_GetPortPinForIndex(i, &xr_port, &xr_pin);
+
+		if (HAL_GPIO_ReadPin(xr_port, xr_pin) == GPIO_PIN_LOW)
+			val = 0;
+		else 
+			val = 1;
+#else
+		val = bk_gpio_input(i);
+		if (val){
+			val = 1;
+		} else {
+			val = 0;
+		}
+#endif
+		value |= ((val & 1)<<i);
+	}
+	addLogAdv(LOG_INFO, LOG_FEATURE_GENERAL,"GPIs are 0x%x", value);
+	return 1;
+}
+
+
 void PIN_Init(void)
 {
 #if WINDOWS
@@ -1224,6 +1269,8 @@ void PIN_Init(void)
     ASSERT(kNoErr == result);
 #endif
 
+
+	CMD_RegisterCommand("showgpi", NULL, showgpi, "log stat of all GPIs", NULL);
 }
 
 void PIN_set_wifi_led(int value){
@@ -1242,3 +1289,6 @@ void PIN_set_wifi_led(int value){
 		RAW_SetPinValue(res, value & 1);
 	}
 }
+
+
+
