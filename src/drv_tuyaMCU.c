@@ -4,6 +4,7 @@
 #include "new_cmd.h"
 #include "logging/logging.h"
 #include "drv_tuyaMCU.h"
+#include <time.h>
 
 
 #if PLATFORM_BK7231T | PLATFORM_BK7231N
@@ -20,6 +21,8 @@
 #define TUYA_CMD_STATE         0x07
 #define TUYA_CMD_QUERY_STATE   0x08
 #define TUYA_CMD_SET_TIME      0x1C
+
+#define TIMEZONE	1
 
 void TuyaMCU_RunFrame();
 
@@ -268,24 +271,26 @@ void TuyaMCU_SendCommandWithData(byte cmdType, byte *data, int payload_len) {
 	TuyaMCU_Bridge_SendUARTByte(check_sum);
 }
 
-void TuyaMCU_Send_SetTime(rtcc_t *pTime) {
+void TuyaMCU_Send_SetTime(struct tm * ptm) {
 	byte payload_buffer[8];
 	byte tuya_day_of_week;
 
-	if (pTime->day_of_week == 1) {
+	if (ptm->tm_wday == 1) {
 		tuya_day_of_week = 7;
 	} else {
-		tuya_day_of_week = pTime->day_of_week-1;
+		tuya_day_of_week = ptm->tm_wday-1;
 	}
 
 	payload_buffer[0] = 0x01;
-	payload_buffer[1] = pTime->year % 100;
-	payload_buffer[2] = pTime->month;
-	payload_buffer[3] = pTime->day_of_month;
-	payload_buffer[4] = pTime->hour;
-	payload_buffer[5] = pTime->minute;
-	payload_buffer[6] = pTime->second;
+	payload_buffer[1] = ptm->tm_year % 100;
+	payload_buffer[2] = ptm->tm_mon;
+	payload_buffer[3] = ptm->tm_mday;
+	payload_buffer[4] = ptm->tm_hour+TIMEZONE;
+	payload_buffer[5] = ptm->tm_min;
+	payload_buffer[6] = ptm->tm_sec;
 	payload_buffer[7] = tuya_day_of_week; //1 for Monday in TUYA Doc
+	addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,"TuyaMCU_Send_Clock: %s\n", payload_buffer);
+
 
 	TuyaMCU_SendCommandWithData(TUYA_CMD_SET_TIME, payload_buffer, 8);
 }
@@ -318,8 +323,22 @@ int TuyaMCU_Send_SetTime_Example(const void *context, const char *cmd, const cha
 	testTime.minute = 54;
 	testTime.second = 32;
 
-	TuyaMCU_Send_SetTime(&testTime);
+
+	TuyaMCU_Send_SetTime(TuyaMCU_Get_NTP_Time());
+	//TuyaMCU_Send_SetTime(&testTime);
 	return 1;
+}
+
+int TuyaMCU_Get_NTP_Time() {
+	static unsigned int g_time;
+	struct tm * ptm;
+	g_time = NTP_GetCurrentTime();
+	addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,"MCU time to set: %i\n", g_time);
+	ptm = gmtime(&g_time);
+	addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,"ptime ->gmtime => tm_hour: %i\n",ptm->tm_hour );
+	addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,"ptime ->gmtime => tm_min: %i\n", ptm->tm_min );
+	
+	return ptm;
 }
 
 void TuyaMCU_Send(byte *data, int size) {
@@ -371,6 +390,7 @@ void TuyaMCU_ParseStateMessage(const byte *data, int len) {
 			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,"TuyaMCU_ParseStateMessage: raw data 4 int: %i\n",iVal);
 		}
 
+
 		// size of header (type, datatype, len 2 bytes) + data sector size
 		ofs += (4+sectorLen);
 	}
@@ -406,6 +426,10 @@ void TuyaMCU_ProcessIncoming(const byte *data, int len) {
 	{
 	case TUYA_CMD_STATE:
 		TuyaMCU_ParseStateMessage(data+6,len-6);
+		break;
+	case TUYA_CMD_SET_TIME:
+		addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,"TuyaMCU_ParseStateMessage:  TUYA_CMD_SET_TIME");
+		TuyaMCU_Send_SetTime(TuyaMCU_Get_NTP_Time());
 		break;
 	}
 }

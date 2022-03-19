@@ -400,6 +400,14 @@ int http_fn_cfg_wifi(http_request_t *request) {
     poststr(request,"\"><br><br>\
             <input type=\"submit\" value=\"Submit\" onclick=\"return confirm('Are you sure? Please check SSID and pass twice?')\">\
         </form> ");
+    poststr(request,"<br><br><h2> Timezone setting</h2>");
+    poststr(request,"<form action=\"/set_timezone\">\
+            <label for=\"timezone\">Timezone:</label><br>\
+            <input type=\"text\" id=\"timezone\"");
+        poststr(request,"\"><br><br>\
+            <input type=\"submit\" value=\"SaveTimezone\">\
+        </form> ");
+    
     poststr(request,htmlReturnToCfg);
     HTTP_AddBuildFooter(request);
     poststr(request,htmlEnd);
@@ -1028,6 +1036,14 @@ int http_fn_ota(http_request_t *request) {
 
 	poststr(request, NULL);
     return 0;
+}
+
+int http_fn_set_timezone(http_request_t *request) {
+    http_setup(request, httpMimeTypeHTML);
+    addLogAdv(LOG_INFO, LOG_FEATURE_HTTP,"Set Timezone \r\n");
+    //To implement
+    //CFG_SaveTimezone();
+
 }
 
 int http_fn_other(http_request_t *request) {
