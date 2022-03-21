@@ -369,8 +369,9 @@ void TuyaMCU_Init()
 void TuyaMCU_ParseStateMessage(const byte *data, int len) {
 	int ofs;
 	int sectorLen;
-	int fnId;
+	int fnId;  // message dpid
 	int dataType;
+	float actualTemp;
 
 	ofs = 0;
 	
@@ -388,6 +389,14 @@ void TuyaMCU_ParseStateMessage(const byte *data, int len) {
 		if(sectorLen == 4) {  
 			int iVal = data[ofs + 4] << 24 | data[ofs + 5] << 16 | data[ofs + 6] << 8 | data[ofs + 7];
 			addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,"TuyaMCU_ParseStateMessage: raw data 4 int: %i\n",iVal);
+		}
+
+		switch(fnId) {
+			case 0x03:
+				addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,"TuyaMCU_ParseStateMessage Data: %X", data[7]);
+				actualTemp = (float) data[7] / 2;
+				addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,"TuyaMCU_ParseStateMessage Actual Temperature: %i ", actualTemp);
+				break;
 		}
 
 
@@ -431,6 +440,7 @@ void TuyaMCU_ProcessIncoming(const byte *data, int len) {
 		addLogAdv(LOG_INFO, LOG_FEATURE_TUYAMCU,"TuyaMCU_ParseStateMessage:  TUYA_CMD_SET_TIME");
 		TuyaMCU_Send_SetTime(TuyaMCU_Get_NTP_Time());
 		break;
+
 	}
 }
 void TuyaMCU_RunFrame() {
